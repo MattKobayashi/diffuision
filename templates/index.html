@@ -1,0 +1,131 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>diffUIsion</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.6/dist/css/bootstrap.min.css"
+          rel="stylesheet">
+</head>
+<body class="bg-light">
+<div class="container py-5">
+    <h1 class="mb-4">diffUIsion</h1>
+
+    {% if error %}
+      <div class="alert alert-danger">{{ error }}</div>
+    {% endif %}
+
+    <form id="genForm" method="post" action="/generate">
+        <!-- Prompt + Enhance -->
+        <div class="mb-3">
+          <label class="form-label">
+            Prompt
+            <small id="tokCnt" class="text-muted ms-2 d-none">(0 / 77)</small>
+          </label>
+          <div class="d-flex">
+            <!-- prompt textarea -->
+            <textarea class="form-control me-3" name="prompt" rows="3" required
+                      style="flex: 1 1 auto;">{{ prompt or '' }}</textarea>
+
+            <!-- enhance checkbox now on the right -->
+            <div class="form-check ms-2 pt-2">
+              <input class="form-check-input" type="checkbox" value="1"
+                     id="enhanceChk" name="enhance" checked>
+              <label class="form-check-label" for="enhanceChk">Enhance</label>
+            </div>
+          </div>
+        </div>
+
+        <div class="row">
+          <div class="col-md-3 mb-3">
+            <label class="form-label">Model</label>
+            <input class="form-control" name="model"
+                   value="{{ model or 'black-forest-labs/FLUX.1-schnell' }}">
+          </div>
+          <div class="col-md-3 mb-3">
+            <label class="form-label">Token limit</label>
+            <input class="form-control" type="number" name="token_limit"
+                   value="{{ token_limit or 256 }}">
+          </div>
+          <div class="col-md-3 mb-3">
+            <label class="form-label">Seed</label>
+            <input class="form-control" type="number" name="seed"
+                   value="{{ seed or 42 }}">
+          </div>
+          <div class="col-md-3 mb-3">
+            <label class="form-label">API Base URL (optional)</label>
+            <input class="form-control" name="base_url"
+                   value="{{ base_url or '' }}">
+          </div>
+        </div>
+
+        <button class="btn btn-primary" id="generateBtn">Generate</button>
+        <button class="btn btn-danger" id="cancelBtn" disabled>
+            Cancel
+        </button>
+
+        <!-- Progress bar shown while the request is running -->
+        <div class="progress d-none mt-3" id="progressBarContainer" role="status" aria-hidden="true">
+            <div class="progress-bar progress-bar-striped progress-bar-animated"
+                 style="width: 100%"></div>
+        </div>
+    </form>
+</div>
+<script>
+const form        = document.getElementById('genForm');
+const progressBar = document.getElementById('progressBarContainer');
+const genBtn      = document.getElementById('generateBtn');
+const cancelBtn   = document.getElementById('cancelBtn');
+
+const promptTA      = document.querySelector('textarea[name="prompt"]');
+const tokLimitInput = document.querySelector('input[name="token_limit"]');
+const tokCntLbl     = document.getElementById('tokCnt');
+const enhanceChk    = document.getElementById('enhanceChk');   // checkbox
+
+function updateTokCnt() {
+  const tokens = promptTA.value.trim().split(/\s+/).filter(Boolean).length;
+  const limit  = parseInt(tokLimitInput.value || 0, 10) || 0;
+  tokCntLbl.textContent = `(${tokens} / ${limit})`;
+  tokCntLbl.classList.toggle('text-danger', limit && tokens > limit);
+}
+promptTA.addEventListener('input', updateTokCnt);
+tokLimitInput.addEventListener('input', updateTokCnt);
+
+function updateTokVisibility() {
+  const show = !enhanceChk.checked;          // only show when *unchecked*
+  tokCntLbl.classList.toggle('d-none', !show);
+  if (show) updateTokCnt();                  // ensure fresh value when revealed
+}
+
+enhanceChk.addEventListener('change', updateTokVisibility);
+updateTokVisibility();                       // set initial state
+
+let controller;   // AbortController shared between handlers
+
+form.addEventListener('submit', e => {
+  e.preventDefault();           // stay on the page
+  progressBar.classList.remove('d-none');
+  genBtn.disabled = true;
+  cancelBtn.disabled = false;
+
+  controller = new AbortController();
+  const fd = new FormData(form);
+
+  fetch('/generate', { method:'POST', body:fd, signal:controller.signal })
+    .then(r => r.text())
+    .then(html => { document.open(); document.write(html); document.close(); })
+    .catch(err => { if (err.name !== 'AbortError') alert(err); })
+    .finally(() => {
+      progressBar.classList.add('d-none');
+      genBtn.disabled = false;
+      cancelBtn.disabled = true;
+    });
+});
+
+cancelBtn.addEventListener('click', () => {
+  if (controller) controller.abort();          // abort HTTP request
+  fetch('/cancel', {method:'POST'});           // tell server to stop work
+});
+</script>
+</body>
+</html>

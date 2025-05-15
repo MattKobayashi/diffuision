@@ -1,0 +1,5 @@
+.DS_Store
+.aider*
+secrets/
+generated/
+__pycache__/
