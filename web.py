@@ -4,7 +4,7 @@
 #     "diffusers==0.33.1",
 #     "fastapi[standard]==0.115.12",
 #     "jinja2==3.1.6",
-#     "openai==1.78.1",
+#     "openai==1.79.0",
 #     "peft==0.15.2",
 #     "protobuf==6.31.0",
 #     "python-multipart==0.0.20",
