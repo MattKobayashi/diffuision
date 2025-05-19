@@ -37,25 +37,20 @@
         </div>
 
         <div class="row">
-          <div class="col-md-3 mb-3">
+          <div class="col-md-4 mb-3">
             <label class="form-label">Model</label>
             <input class="form-control" name="model"
                    value="{{ model or 'black-forest-labs/FLUX.1-schnell' }}">
           </div>
-          <div class="col-md-3 mb-3">
+          <div class="col-md-4 mb-3">
             <label class="form-label">Token limit</label>
             <input class="form-control" type="number" name="token_limit"
                    value="{{ token_limit or 256 }}">
           </div>
-          <div class="col-md-3 mb-3">
+          <div class="col-md-4 mb-3">
             <label class="form-label">Seed</label>
             <input class="form-control" type="number" name="seed"
                    value="{{ seed or 42 }}">
-          </div>
-          <div class="col-md-3 mb-3">
-            <label class="form-label">API Base URL (optional)</label>
-            <input class="form-control" name="base_url"
-                   value="{{ base_url or '' }}">
           </div>
         </div>
 
