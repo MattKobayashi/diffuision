@@ -221,10 +221,19 @@ templates = Jinja2Templates(directory="templates")
 
 @app.get("/", response_class=HTMLResponse)
 async def index(request: Request):
-    prefill = request.query_params.get("prompt", "")
+    prefill       = request.query_params.get("prompt", "")
+    model_q       = request.query_params.get("model", "black-forest-labs/FLUX.1-schnell")
+    token_limit_q = int(request.query_params.get("token_limit", 256))
+    seed_q        = int(request.query_params.get("seed", 42))
     return templates.TemplateResponse(
         "index.html",
-        {"request": request, "prompt": prefill},
+        {
+            "request": request,
+            "prompt": prefill,
+            "model": model_q,
+            "token_limit": token_limit_q,
+            "seed": seed_q,
+        },
     )
 
 
@@ -270,6 +279,9 @@ async def run_generation(
             "request": request,
             "img_url": f"/generated/{img_path.name}",
             "prompt": prompt,
+            "model": model,
+            "token_limit": token_limit,
+            "seed": seed,
         },
     )
 

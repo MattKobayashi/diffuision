@@ -20,7 +20,8 @@
              alt="Generated image">
     </a>
     <div class="mt-4">
-        <a class="btn btn-secondary" href="/?prompt={{ prompt|urlencode }}">Generate another</a>
+        <a class="btn btn-secondary"
+           href="/?prompt={{ prompt|urlencode }}&model={{ model|urlencode }}&token_limit={{ token_limit }}&seed={{ seed }}">Generate another</a>
         <a class="btn btn-success" href="{{ img_url }}" download>Download</a>
     </div>
 </div>
