@@ -77,13 +77,12 @@ def _create_pipeline(model: str, device: torch.device, *, token: str) -> FluxPip
     return pipe
 
 
-def _subproc_worker(prompt, model, token_limit, base_url, seed, enhance, q: MPQueue):
+def _subproc_worker(prompt, model, token_limit, seed, enhance, q: MPQueue):
     try:
         img_path = generate_image(
             prompt,
             model,
             token_limit,
-            base_url,
             seed,
             enhance=enhance,
         )
@@ -117,20 +116,21 @@ def enhance_prompt(
 
     # Lazy-load model & tokenizer once
     if _tokenizer is None or _superprompt_model is None:
-        _tokenizer = T5Tokenizer.from_pretrained("roborovski/superprompt-v1")
+        _tokenizer = T5Tokenizer.from_pretrained(
+            "roborovski/superprompt-v1", legacy=False
+        )
         _superprompt_model = T5ForConditionalGeneration.from_pretrained(
             "roborovski/superprompt-v1",
             device_map="auto" if device.type != "cpu" else None,
         )
-        if device.type == "cpu":          # `device_map="auto"` already handles non-CPU
+        if device.type == "cpu":  # `device_map="auto"` already handles non-CPU
             _superprompt_model.to(device)
 
     prefix = "Expand the following prompt to add more detail: "
     input_text = prefix + short_prompt.strip()
 
     input_ids = _tokenizer(input_text, return_tensors="pt").input_ids.to(device)
-    # Model is trained for max 77 new tokens → respect both that and caller’s limit
-    max_new = min(77, token_limit)
+    max_new = max(77, token_limit)
     output_ids = _superprompt_model.generate(input_ids, max_new_tokens=max_new)
     enhanced = _tokenizer.decode(output_ids[0], skip_special_tokens=True).strip()
 
@@ -146,7 +146,6 @@ def generate_image(
     short_prompt: str,
     model: str,
     token_limit: int = 256,
-    base_url: str | None = None,
     seed: int = 42,
     enhance: bool = True,
 ) -> Path:
@@ -178,23 +177,14 @@ def generate_image(
         "3d, cgi, childish, naive",
     )
 
-    with concurrent.futures.ThreadPoolExecutor(max_workers=2) as pool:
-        pipe_future = pool.submit(_create_pipeline, model, device, token=hf_token)
+    if enhance:
+        prompt = enhance_prompt(short_prompt, token_limit, device=device)
+    else:
+        prompt = short_prompt
+    print("Enhanced prompt:" if enhance else "Prompt:", prompt)
 
-        if enhance:
-            prompt_future = pool.submit(
-                enhance_prompt, short_prompt, token_limit, device=device
-            )
-        else:
-            prompt_future = None
-
-        prompt = prompt_future.result() if enhance else short_prompt
-        print("Enhanced prompt:" if enhance else "Prompt:", prompt)
-
-        pipe = pipe_future.result()  # wait for pipeline to finish loading
-
+    pipe = _create_pipeline(model, device, token=hf_token)
     generator = torch.Generator(device=device).manual_seed(seed)
-
     pipe_args = dict(
         generator=generator,
         guidance_scale=guidance_scale,
@@ -244,7 +234,6 @@ async def run_generation(
     prompt: str = Form(...),
     model: str = Form("black-forest-labs/FLUX.1-schnell"),
     token_limit: int = Form(256),
-    base_url: str | None = Form(None),
     seed: int = Form(42),
     enhance: bool = Form(False),
 ):
@@ -253,7 +242,7 @@ async def run_generation(
     gen_queue = ctx.Queue()
     gen_process = ctx.Process(
         target=_subproc_worker,
-        args=(prompt, model, token_limit, base_url, seed, enhance, gen_queue),
+        args=(prompt, model, token_limit, seed, enhance, gen_queue),
         daemon=True,
     )
     gen_process.start()
