@@ -13,7 +13,6 @@
 # ]
 # ///
 import asyncio
-import concurrent.futures
 import multiprocessing
 from multiprocessing.queues import (
     Queue as MPQueue,
@@ -26,7 +25,7 @@ from fastapi import FastAPI, Request, Form
 from fastapi.responses import HTMLResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
-from transformers import T5Tokenizer, T5ForConditionalGeneration
+from transformers import pipeline
 from pathlib import Path
 import torch
 
@@ -52,8 +51,8 @@ except FileNotFoundError:
 gen_process: multiprocessing.Process | None = None
 gen_queue: MPQueue | None = None
 
-_tokenizer: T5Tokenizer | None = None
-_superprompt_model: T5ForConditionalGeneration | None = None
+# Lazy-loaded chat/text-generation pipeline
+_gemma_pipe = None  # type: ignore
 
 
 def _create_pipeline(model: str, device: torch.device, *, token: str) -> FluxPipeline:
@@ -91,54 +90,63 @@ def _subproc_worker(prompt, model, token_limit, seed, enhance, q: MPQueue):
         q.put(("err", str(e)))
 
 
-def enhance_prompt(
-    short_prompt: str,
-    token_limit: int,
-    *,
-    device: torch.device | None = None,
-) -> str:
+def enhance_prompt(short_prompt: str, model: str, token_limit: int) -> str:
     """
-    Use `roborovski/superprompt-v1` to expand `short_prompt` while keeping the
+    Use `google/gemma-3-1b-it` to expand `short_prompt` while keeping the
     result ≤ `token_limit` tokens (77 is the model's practical maximum).
     """
-    global _tokenizer, _superprompt_model
+    global _gemma_pipe
 
-    # Select device if not provided
-    if device is None:
-        if torch.backends.mps.is_available():
-            device = torch.device("mps")
-        elif torch.cuda.is_available():
-            device = torch.device("cuda")
-        elif torch.xpu.is_available():
-            device = torch.device("xpu")
-        else:
-            device = torch.device("cpu")
+    # Lazy-load chat pipeline once
+    if _gemma_pipe is None:
+        device_arg = -1
+        dtype_kw = {}
+        if torch.cuda.is_available():
+            device_arg = 0
+            dtype_kw = {"torch_dtype": torch.bfloat16}
+        elif torch.backends.mps.is_available():
+            device_arg = "mps"
+            dtype_kw = {"torch_dtype": torch.bfloat16}
 
-    # Lazy-load model & tokenizer once
-    if _tokenizer is None or _superprompt_model is None:
-        _tokenizer = T5Tokenizer.from_pretrained(
-            "roborovski/superprompt-v1", legacy=False
+        _gemma_pipe = pipeline(
+            "text-generation",
+            model="google/gemma-3-1b-it",
+            token=hf_token,
+            device=device_arg,
+            **dtype_kw,
         )
-        _superprompt_model = T5ForConditionalGeneration.from_pretrained(
-            "roborovski/superprompt-v1",
-            device_map="auto" if device.type != "cpu" else None,
-        )
-        if device.type == "cpu":  # `device_map="auto"` already handles non-CPU
-            _superprompt_model.to(device)
 
-    prefix = "Expand the following prompt to add more detail: "
-    input_text = prefix + short_prompt.strip()
+    messages = [
+        [
+            {
+                "role": "system",
+                "content": [
+                    {
+                        "type": "text",
+                        "text": (
+                            f"You are a prompt engineer, enhancing a short prompt for image generation using the {model} model. "
+                            "The enhanced prompt should be highly detailed and evocative, with added stylistic elements, "
+                            f"and should be no longer than {token_limit} tokens. "
+                            "Do not include any text other than the enhanced prompt."
+                        ),
+                    }
+                ],
+            },
+            {
+                "role": "user",
+                "content": [{"type": "text", "text": short_prompt.strip()}],
+            },
+        ],
+    ]
 
-    input_ids = _tokenizer(input_text, return_tensors="pt").input_ids.to(device)
-    max_new = max(77, token_limit)
-    output_ids = _superprompt_model.generate(input_ids, max_new_tokens=max_new)
-    enhanced = _tokenizer.decode(output_ids[0], skip_special_tokens=True).strip()
+    with torch.inference_mode():
+        out = _gemma_pipe(messages, max_new_tokens=token_limit)
+    enhanced = out[0][0]["generated_text"][2]["content"].strip()
 
     # Hard trim to `token_limit` tokens (space-separated) as a safety net
     words = enhanced.split()
     if len(words) > token_limit:
         enhanced = " ".join(words[:token_limit])
-
     return enhanced
 
 
@@ -178,7 +186,7 @@ def generate_image(
     )
 
     if enhance:
-        prompt = enhance_prompt(short_prompt, token_limit, device=device)
+        prompt = enhance_prompt(short_prompt, model, token_limit)
     else:
         prompt = short_prompt
     print("Enhanced prompt:" if enhance else "Prompt:", prompt)
@@ -221,10 +229,10 @@ templates = Jinja2Templates(directory="templates")
 
 @app.get("/", response_class=HTMLResponse)
 async def index(request: Request):
-    prefill       = request.query_params.get("prompt", "")
-    model_q       = request.query_params.get("model", "black-forest-labs/FLUX.1-schnell")
+    prefill = request.query_params.get("prompt", "")
+    model_q = request.query_params.get("model", "black-forest-labs/FLUX.1-schnell")
     token_limit_q = int(request.query_params.get("token_limit", 256))
-    seed_q        = int(request.query_params.get("seed", 42))
+    seed_q = int(request.query_params.get("seed", 42))
     return templates.TemplateResponse(
         "index.html",
         {
