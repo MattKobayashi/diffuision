@@ -9,7 +9,7 @@
 #     "python-multipart==0.0.20",
 #     "sentencepiece==0.2.0",
 #     "torch==2.7.0",
-#     "transformers==4.52.2",
+#     "transformers==4.52.3",
 # ]
 # ///
 import asyncio
