@@ -5,7 +5,7 @@
 #     "fastapi[standard]==0.115.12",
 #     "jinja2==3.1.6",
 #     "peft==0.15.2",
-#     "protobuf==6.31.0",
+#     "protobuf==6.31.1",
 #     "python-multipart==0.0.20",
 #     "sentencepiece==0.2.0",
 #     "torch==2.7.0",
