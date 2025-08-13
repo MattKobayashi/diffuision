@@ -7,7 +7,7 @@
 #     "peft==0.17.0",
 #     "protobuf==6.31.1",
 #     "python-multipart==0.0.20",
-#     "sentencepiece==0.2.0",
+#     "sentencepiece==0.2.1",
 #     "torch==2.8.0",
 #     "transformers==4.55.0",
 # ]
