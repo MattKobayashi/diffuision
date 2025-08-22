@@ -4,7 +4,7 @@
 #     "diffusers==0.35.1",
 #     "fastapi[standard]==0.116.1",
 #     "jinja2==3.1.6",
-#     "peft==0.17.0",
+#     "peft==0.17.1",
 #     "protobuf==6.32.0",
 #     "python-multipart==0.0.20",
 #     "sentencepiece==0.2.1",
