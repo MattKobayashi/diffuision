@@ -2,7 +2,7 @@
 # requires-python = ">=3.11, <3.12"
 # dependencies = [
 #     "diffusers==0.35.1",
-#     "fastapi[standard]==0.118.1",
+#     "fastapi[standard]==0.118.2",
 #     "jinja2==3.1.6",
 #     "peft==0.17.1",
 #     "protobuf==6.32.1",
